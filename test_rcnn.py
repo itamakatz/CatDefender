@@ -1,20 +1,15 @@
 import threading
 import cv2, queue, threading, time
 import os
-import cv2
-import copy
 import subprocess
-import sys
 import torchvision 
 from torchvision import transforms
-import matplotlib.pyplot as plt
-from PIL import Image
-from scipy import signal
 import numpy as np
-from PIL import Image, ImageFilter
+import matplotlib.pyplot as plt
+from PIL import Image, ImageFilter, signal
 
-# bufferless VideoCapture
 class VideoCapture:
+  '''bufferless VideoCapture'''
 
   def __init__(self, name):
     self.cap = cv2.VideoCapture(name)
@@ -91,55 +86,17 @@ countoursLock = threading.Lock()
 cam = VideoCapture(0)
 countours = []
 
-def downsample(img,hfactor,wfactor):
-  w,h = img.size[0]//hfactor,img.size[1]//wfactor
-  if 'P' in img.mode: # check if image is a palette type
-     img = img.convert("RGB") # convert it to RGB
-    #  hfactor
-     img = img.resize((w,h),Image.ANTIALIAS) # resize it
-     img = img.convert("P",dither=Image.NONE, palette=Image.ADAPTIVE) 
-           #convert back to palette
-  else:
-     img = img.resize((w,h),Image.ANTIALIAS) # regular resize
-  return img
-
 def get_prediction(img, threshold):
-  """
-  get_prediction
-    parameters:
-      - img - image
-      - threshold - threshold value for prediction score
-    method:
-      - Image is obtained from the image path
-      - the image is converted to image tensor using PyTorch's Transforms
-      - image is passed through the model to get the predictions
-      - class, box coordinates are obtained, but only prediction score > threshold
-        are chosen.
-    
-  """
 
   transform = transforms.Compose([transforms.ToTensor()])
   img = transform(img)
   model = lazy_model()
   pred = model([img])
-  # pred_class = [COCO_INSTANCE_CATEGORY_NAMES[i] for i in list(pred[0]['labels'].numpy())]
-  # pred_boxes = [[(i[0], i[1]), (i[2], i[3])] for i in list(pred[0]['boxes'].detach().numpy())]
   pred_class = list(pred[0]['labels'].detach().numpy())
   pred_score = list(pred[0]['scores'].detach().numpy())
   class_scores_pair = list(zip(pred_class, pred_score))
   pred_t = [pair for pair in class_scores_pair if COCO_INSTANCE_CATEGORY_NAMES[pair[0]]=='cat' and pair[1]>threshold]
-  # pred_t = [pred_score.index(x) for x in pred_score if x>threshold]
-  # indices = np.argwhere(np.array(pred_class) == 'cat')
   return len(pred_t) > 0 
-  # if(len(pred_t) == 0): return False
-  # pred_t = pred_t[-1]
-  # pred_boxes = pred_boxes[:pred_t+1]
-  # pred_class = pred_class[:pred_t+1]
-  # if(len(indices) == 0): return None, None
-  # indices = np.reshape(indices, indices.size).astype(int)
-  # pred_boxes = [ pred_boxes[i] for i in indices]
-  # pred_class = [ pred_class[i] for i in indices]
-  # return pred_boxes, pred_class
 
 def show_cam():
   print("in show_cam")
@@ -150,14 +107,6 @@ def show_cam():
     camLock.acquire()
     frame = cam.read()
     camLock.release()
-
-    # countoursLock.acquire()
-    # local_countours = copy.deepcopy(countours)
-    # countoursLock.release()
-
-    # for i in local_countours:
-    #   (x, y, w, h) = cv2.boundingRect(i)
-    #   cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
     if frame is None:
       print("failed to grab frame")
@@ -218,10 +167,6 @@ def check_motion(alpha = 0.96):
 
     local_countours = [c for c in local_countours if cv2.contourArea(c) >= 50]
 
-    # countoursLock.acquire()
-    # countours = copy.deepcopy(local_countours)
-    # countoursLock.release()
-
     for i in local_countours:
       (x, y, w, h) = cv2.boundingRect(i)
       cropped_im = frame[x:x + w,y:y + h,:]
@@ -250,38 +195,7 @@ def object_detection_multithreading(threshold=0.5):
    t.join()   
   # camLock.release()
  
-# def object_detection_api(threshold=0.5, rect_th=3, text_size=3, text_th=3): 
-#   while True:
-#     # for i in range(10):
-#     #   print(i)
-#     #   frame = cam.read()
-#     #   if frame is None:
-#     #       print("failed to grab frame")
-#     #       return
-#     #   cv2.imshow("test", frame)  
-
-#     frame = cam.read()
-#     boxes, pred_cls = get_prediction(frame, threshold)
-
-#     plt.figure(figsize=(20,30)) 
-#     if(boxes is None or pred_cls is None):
-#       plt.imshow(frame) 
-#     else:
-#       for i in range(len(boxes)): 
-#         cv2.rectangle(frame, boxes[i][0], boxes[i][1],color=(0, 255, 0), thickness=rect_th) 
-#         # Draw Rectangle with the coordinates 
-#         cv2.putText(frame,pred_cls[i], boxes[i][0], cv2.FONT_HERSHEY_SIMPLEX, text_size, (0,255,0),thickness=text_th) 
-#         # Write the prediction class 
-#         # display the output image 
-#         plt.imshow(frame) 
-#         plt.xticks([]) 
-#         plt.yticks([]) 
-#     plt.show()
-
 # img = Image.open('./Images/cat3.jpeg')
-# img = img.filter(ImageFilter.BLUR)
-# img = img.filter(ImageFilter.GaussianBlur(5))
-# img = downsample(img,10,10)
 # plt.figure(figsize=(20,30)) 
 # plt.imshow(img)   
 # plt.show() 
