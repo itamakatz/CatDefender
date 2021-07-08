@@ -10,6 +10,7 @@
 # ====
 
 import cv2
+import numpy as np
 
 cam = cv2.VideoCapture(0)
 # width = 2592
@@ -25,13 +26,24 @@ cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 cv2.namedWindow("test")
 
 img_counter = 0
+count = 10
+alpha = 1/count
 
 while True:
     ret, frame = cam.read()
+    # if not ret:
+    #     print("failed to grab frame")
+    #     break
+    # for i in range(count):
+    #     ret_new, frame_new = cam.read()
+    #     if not ret_new:
+    #         print("failed to grab frame")
+    #         break
+    #     frame = frame*alpha + frame_new*(1-alpha)
     if not ret:
         print("failed to grab frame")
         break
-    cv2.imshow("test", frame)
+    cv2.imshow("test", frame.astype(np.uint8))
 
     k = cv2.waitKey(1)
     if k%256 == 27:

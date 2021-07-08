@@ -12,11 +12,18 @@ import itertools
 import select, sys
 from datetime import datetime
 
+COPY_MODEL_FILES = False
+# COPY_MODEL_FILES = True
+
 class VideoCapture:
   '''bufferless VideoCapture'''
 
   def __init__(self, name):
     self.cap = cv2.VideoCapture(name)
+    # width = 640
+    # height = 480
+    # width = 320
+    # height = 240    
     width = 2560 # 2592
     height = 1920 # 1944
     self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -65,22 +72,28 @@ def memoize(f):
 @memoize
 def lazy_model():
     print("Creating model once which is expensive...")
-    time.sleep(1)
 
-    # CACHE_PATH = "/home/pi/.cache/torch/hub/checkpoints"
-    # CACHE_BACKUP_PATH = "/home/pi/.cache/torch/hub/checkpoints_backup"
-    # if(os.path.exists(CACHE_PATH)):
-    #   shutil.rmtree(CACHE_PATH)
-    # if(os.path.exists(CACHE_BACKUP_PATH)):
-    #   shutil.copytree(CACHE_BACKUP_PATH, CACHE_PATH)
+    if(COPY_MODEL_FILES):
+      print("Copying model files..")
+      CACHE_PATH = "/home/pi/.cache/torch/hub/checkpoints"
+      CACHE_BACKUP_PATH = "/home/pi/.cache/torch/hub/checkpoints_backup"
+      if(os.path.exists(CACHE_PATH)):
+        shutil.rmtree(CACHE_PATH)
+      if(os.path.exists(CACHE_BACKUP_PATH)):
+        shutil.copytree(CACHE_BACKUP_PATH, CACHE_PATH)
+      print("Finished copying files..")
 
     # model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True) 
     model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True) 
     # model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True) 
+    
     model.eval()  
+    print("Finished creating model!")
     return model
 
+print(f"current working directory: {os.getcwd()}")
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
+print(f"current working directory: {os.getcwd()}")
 
 COCO_INSTANCE_CATEGORY_NAMES = ['__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack', 'umbrella', 'N/A', 'N/A', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'N/A', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table', 'N/A', 'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -88,7 +101,20 @@ exitFlag = False
 camLock = threading.Lock()
 cam = VideoCapture(0)
 
+# import ctypes, os
+# try:
+#  is_admin = os.getuid() == 0
+# except AttributeError:
+#  is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+
+def toggle_led(state):
+  state = "1" if state else "0"
+  # if(is_admin): subprocess.run(["./toggle_LED.sh", state])
+  subprocess.run(["./toggle_LED.sh", state])
+
 def get_prediction(img, threshold):
+
+  toggle_led(True)
 
   transform = transforms.Compose([transforms.ToTensor()])
   img = transform(img)
@@ -98,6 +124,8 @@ def get_prediction(img, threshold):
   pred_score = list(pred[0]['scores'].detach().numpy())
   class_scores_pair = list(zip(pred_class, pred_score))
   pred_t = [pair for pair in class_scores_pair if COCO_INSTANCE_CATEGORY_NAMES[pair[0]]=='cat' and pair[1]>threshold]
+
+  toggle_led(False)
   return len(pred_t) > 0 
 
 def show_cam():
@@ -185,10 +213,15 @@ def check_motion(alpha = 0.96, contour_threshold = 50, cat_threshold=0.1):
       has_input, o, e = select.select( [sys.stdin], [], [], 0.1 ) 
     else:
       has_input = False
+
     camLock.acquire()
     frame = cam.read()
     camLock.release()
     
+    # running_time = Running_Time()
+    # cat_detected = get_prediction(frame, cat_threshold)
+    # print(f"finished predicting. running time: {running_time.get_running_time()}")
+
     gray2 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.GaussianBlur(gray2, (21, 21), 0)
     
@@ -322,6 +355,6 @@ def object_detection_multithreading(threshold=0.5):
 
 # check_cat(0.1)
 # show_cam()
-check_motion()
+check_motion(alpha = 0.5, contour_threshold = 50, cat_threshold=0.1)
 cam.release()
-cv2.destroyAllWindows(alpha = 0.5, contour_threshold = 50, cat_threshold=0.1)
+cv2.destroyAllWindows()
