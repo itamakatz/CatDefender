@@ -15,14 +15,14 @@ import numpy as np
 cam = cv2.VideoCapture(0)
 # width = 2592
 # height = 1944
-# width = 2560
-# height = 1920
+width = 2560
+height = 1920
 # width = 2304
 # height = 1728
 # width = 1280
 # height = 960
-width = 640
-height = 480
+# width = 640
+# height = 480
 cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
 cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 cv2.namedWindow("test")
