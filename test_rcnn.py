@@ -1,3 +1,4 @@
+import copy
 import threading
 import cv2, queue, threading, time
 import os
@@ -15,20 +16,33 @@ from datetime import datetime
 COPY_MODEL_FILES = False
 # COPY_MODEL_FILES = True
 
+# WIDTH = 640
+# HEIGHT = 480
+# WIDTH = 320
+# HEIGHT = 240    
+WIDTH = 2560 # 2592
+HEIGHT = 1920 # 1944
+
+SOUND_FILE = "./ding.wav"
+# SOUND_FILE = "./roar.wav"
+
+# DETECT_OBJECT = 'cat'
+DETECT_OBJECT = 'person'
+
+DEBUG_WITH_WINDOW = False
+# DEBUG_WITH_WINDOW = True
+
+DONT_PREDICT = False
+# DONT_PREDICT = True
+
 class VideoCapture:
   '''bufferless VideoCapture'''
 
   def __init__(self, name):
     self.cap = cv2.VideoCapture(name)
-    # width = 640
-    # height = 480
-    # width = 320
-    # height = 240    
-    width = 2560 # 2592
-    height = 1920 # 1944
-    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    
+
+    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
     self.q = queue.Queue()
     self.stop_thread = False
     self.t = threading.Thread(target=self._reader)
@@ -101,18 +115,15 @@ exitFlag = False
 camLock = threading.Lock()
 cam = VideoCapture(0)
 
-# import ctypes, os
-# try:
-#  is_admin = os.getuid() == 0
-# except AttributeError:
-#  is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-
 def toggle_led(state):
   state = "1" if state else "0"
-  # if(is_admin): subprocess.run(["./toggle_LED.sh", state])
   subprocess.run(["./toggle_LED.sh", state])
 
 def get_prediction(img, threshold):
+  
+  if(DONT_PREDICT):
+    print("Flag for no prediction is True")
+    return False
 
   toggle_led(True)
 
@@ -123,7 +134,7 @@ def get_prediction(img, threshold):
   pred_class = list(pred[0]['labels'].detach().numpy())
   pred_score = list(pred[0]['scores'].detach().numpy())
   class_scores_pair = list(zip(pred_class, pred_score))
-  pred_t = [pair for pair in class_scores_pair if COCO_INSTANCE_CATEGORY_NAMES[pair[0]]=='cat' and pair[1]>threshold]
+  pred_t = [pair for pair in class_scores_pair if COCO_INSTANCE_CATEGORY_NAMES[pair[0]]==DETECT_OBJECT and pair[1]>threshold]
 
   toggle_led(False)
   return len(pred_t) > 0 
@@ -150,6 +161,7 @@ def show_cam():
       print("Escape hit, closing...")
       exitFlag = True
       break
+
   print("exiting show_cam")
 
 def check_cat(threshold = 0.1):
@@ -165,7 +177,7 @@ def check_cat(threshold = 0.1):
     if(cat_found):
       print("detected a cat!")
       result = subprocess.run(
-          ["aplay", "-D", "hw:2", "./ding.wav"], capture_output=True, text=True
+          ["aplay", "-D", "hw:2", SOUND_FILE], capture_output=True, text=True
       )
   print("exiting check_detect")
 
@@ -217,10 +229,6 @@ def check_motion(alpha = 0.96, contour_threshold = 50, cat_threshold=0.1):
     camLock.acquire()
     frame = cam.read()
     camLock.release()
-    
-    # running_time = Running_Time()
-    # cat_detected = get_prediction(frame, cat_threshold)
-    # print(f"finished predicting. running time: {running_time.get_running_time()}")
 
     gray2 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.GaussianBlur(gray2, (21, 21), 0)
@@ -233,61 +241,65 @@ def check_motion(alpha = 0.96, contour_threshold = 50, cat_threshold=0.1):
     countours, heirarchy = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     countours = [c for c in countours if cv2.contourArea(c) >= contour_threshold]
-    import copy
-    countours2 = copy.deepcopy(countours)
-    countour_indices = list(range(len(countours2)))
+    # countours2 = copy.deepcopy(countours)
+    # countour_indices = list(range(len(countours2)))
 
-    while(True):
-      found_intersection = False
-      for i in range(len(countour_indices)):
-        if(countour_indices[i] < 0): continue
-        countour_indices[i] = -0.5
-        for j in range(len(countour_indices)):
-          if(countour_indices[j] < 0): continue
-          if(Rectangle.do_contours_intersect(countours2[i], countours2[j])):
-            found_intersection = True
-            countours2[i] = np.concatenate([countours2[i], countours2[j]])
-            countour_indices[j] = -i-1
-            countours2[j] = None
-
-      if(not found_intersection): 
-        # countours2 = [pair[0] for pair in list(zip(countours2, countour_indices)) if pair[1] == -0.5]
-        countours2 = [c for c in countours2 if c is not None]
-        countour_indices = list(range(len(countours2)))
-        pairs = []
-        for pair in itertools.combinations(list(range(len(countours2))), 2):
-          if(countours2[pair[0]] is None or countours2[pair[1]] is None): continue
-          if(Rectangle.do_contours_intersect(countours2[pair[0]], countours2[pair[1]])):
-            pairs.append(pair)
-
-        if(len(pairs) == 0): break;
-
-
-
-    # combined = [] if len(countours) == 0 else np.concatenate(countours)
-
-    # if(len(combined)>0):
-    #   (x, y, w, h) = cv2.boundingRect(combined)
-    #   cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-    # for i in countours:
-    #   (x, y, w, h) = cv2.boundingRect(i)
-    #   cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
-    
     cropped_images = []
 
-    for i in countours2:
+    for i in countours:
       (x, y, w, h) = cv2.boundingRect(i)
-      # cropped_images.append(frame[x:x + w,y:y + h,:])
       cropped_images.append(frame[y:y + h,x:x + w,:])
-      # cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+      if(DEBUG_WITH_WINDOW):
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        
+    # while(True):
+    #   found_intersection = False
+    #   for i in range(len(countour_indices)):
+    #     if(countour_indices[i] < 0): continue
+    #     countour_indices[i] = -0.5
+    #     for j in range(len(countour_indices)):
+    #       if(countour_indices[j] < 0): continue
+    #       if(Rectangle.do_contours_intersect(countours2[i], countours2[j])):
+    #         found_intersection = True
+    #         countours2[i] = np.concatenate([countours2[i], countours2[j]])
+    #         countour_indices[j] = -i-1
+    #         countours2[j] = None
 
-    # cv2.imshow('window',frame)
+    #   if(not found_intersection): 
+    #     countours2 = [c for c in countours2 if c is not None]
+    #     countour_indices = list(range(len(countours2)))
+    #     pairs = []
+    #     for pair in itertools.combinations(list(range(len(countours2))), 2):
+    #       if(countours2[pair[0]] is None or countours2[pair[1]] is None): continue
+    #       if(Rectangle.do_contours_intersect(countours2[pair[0]], countours2[pair[1]])):
+    #         pairs.append(pair)
 
-    max_pairs = list(zip(countours2, cropped_images))
+    #     if(len(pairs) == 0): break;
+
+    # if(DEBUG_WITH_WINDOW):
+    #   combined = [] if len(countours) == 0 else np.concatenate(countours)
+
+    #   if(len(combined)>0):
+    #     (x, y, w, h) = cv2.boundingRect(combined)
+    #     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    
+    # cropped_images = []
+
+    # for i in countours2:
+    #   (x, y, w, h) = cv2.boundingRect(i)
+    #   cropped_images.append(frame[y:y + h,x:x + w,:])
+    #   if(DEBUG_WITH_WINDOW):
+    #     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+
+    # if(DEBUG_WITH_WINDOW):
+    #   cv2.imshow('window',frame)
+
+    # max_pairs = list(zip(countours2, cropped_images))
+    max_pairs = list(zip(countours, cropped_images))
     max_pairs.sort(reverse=True, key=lambda x: cv2.contourArea(x[0]))
     max_pairs = max_pairs[:1]
-    max_pairs = [e for e in max_pairs if cv2.contourArea(e[0]) > 2500]
+    max_pairs = [pair for pair in max_pairs if cv2.contourArea(pair[0]) > 2500]
+    # max_pairs = [pair for pair in max_pairs if cv2.contourArea(pair[0]) > 2500 and pair[1].shape[1] < WIDTH//2]
 
     for pair in max_pairs:
       timeStr = datetime.now().strftime("%H:%M:%S.%f")
@@ -300,7 +312,7 @@ def check_motion(alpha = 0.96, contour_threshold = 50, cat_threshold=0.1):
       if(cat_detected):
         print("detected a cat!")
         result = subprocess.run(
-            ["aplay", "-D", "hw:2", "./ding.wav"], capture_output=True, text=True
+            ["aplay", "-D", "hw:2", SOUND_FILE], capture_output=True, text=True
         )
         print("saving cat frame...")
         timeStr = datetime.now().strftime("%H:%M:%S.%f")
@@ -326,12 +338,14 @@ def check_motion(alpha = 0.96, contour_threshold = 50, cat_threshold=0.1):
       else:
         print(f"received an illegal command: {cli}")
 
-    # k = cv2.waitKey(1)
-    # if k%256 == 27:
-    #   # ESC pressed
-    #   print("Escape hit, closing...")
-    #   exitFlag = True
-    #   break    
+    if(DEBUG_WITH_WINDOW):
+      k = cv2.waitKey(1)
+      if k%256 == 27 or k%256 == 81 or k%256 == 113:
+        # pressed q or Q or ESC
+        print("Escape hit, closing...")
+        exitFlag = True
+        break
+
   print("exiting check_motion")
 
 def object_detection_multithreading(threshold=0.5):

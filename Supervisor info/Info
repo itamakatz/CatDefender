@@ -1,0 +1,3 @@
+sudo supervisorctl
+/etc/supervisor/conf.d/
+/var/log/supervisor/
